@@ -246,6 +246,11 @@ void ble_npl_eventq_put(struct ble_npl_eventq *evq, struct ble_npl_event *ev) {
     DEBUG_EVENT_printf("ble_npl_eventq_put(%p, %p (%p, %p))\n", evq, ev, ev->fn, ev->arg);
     os_sr_t sr;
     OS_ENTER_CRITICAL(sr);
+    // A repeated enqueue must not sever the links to other pending events.
+    if (ev->pending) {
+        OS_EXIT_CRITICAL(sr);
+        return;
+    }
     ev->next = NULL;
     ev->pending = true;
     if (evq->head == NULL) {
