@@ -91,7 +91,7 @@ static ringbuf_t hci_rx_ringbuf = {
 };
 
 static void mp_bluetooth_hci_uart_irq_callback(unsigned int uart_id, unsigned int trigger) {
-    if (trigger == MP_UART_IRQ_RXIDLE) {
+    if (trigger == MP_UART_IRQ_RX) {
         mp_bluetooth_hci_poll_now();
     }
 }
@@ -103,7 +103,10 @@ int mp_bluetooth_hci_uart_init(uint32_t port, uint32_t baudrate) {
     // Initialise the UART.
     mp_uart_init(hci_uart_id, baudrate, UART_DATA_BITS_8, UART_PARITY_NONE, UART_STOP_BITS_1, pin_BT_UART_TX, pin_BT_UART_RX, &hci_rx_ringbuf);
     mp_uart_set_flow(hci_uart_id, pin_BT_UART_RTS, pin_BT_UART_CTS);
-    mp_uart_set_irq_callback(hci_uart_id, MP_UART_IRQ_RXIDLE, mp_bluetooth_hci_uart_irq_callback);
+    // UART IRQs can preempt PendSV and the soft-timer heap's critical sections.
+    // RXIDLE reinserts a soft timer from that IRQ, corrupting or losing timers.
+    // Schedule the ISR-safe HCI node directly when bytes enter the RX ring.
+    mp_uart_set_irq_callback(hci_uart_id, MP_UART_IRQ_RX, mp_bluetooth_hci_uart_irq_callback);
 
     // Start the HCI polling to process any initial events/packets.
     mp_bluetooth_hci_start_polling();
