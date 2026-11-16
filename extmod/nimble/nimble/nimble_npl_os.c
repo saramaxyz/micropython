@@ -91,7 +91,7 @@ static void m_free_bluetooth(void *ptr) {
     if (alloc->prev) {
         alloc->prev->next = alloc->next;
     } else {
-        MP_STATE_PORT(bluetooth_nimble_memory) = NULL;
+        MP_STATE_PORT(bluetooth_nimble_memory) = alloc->next;
     }
     m_free(alloc
     #if MICROPY_MALLOC_USES_ALLOCATED_SIZE
