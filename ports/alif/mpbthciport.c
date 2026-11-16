@@ -79,6 +79,7 @@ void mp_bluetooth_hci_poll_now(void) {
 
 #include "mpuart.h"
 
+volatile uint32_t mp_bluetooth_hci_max_write;
 static uint32_t hci_uart_id;
 static bool hci_uart_first_char;
 static uint8_t hci_rx_ringbuf_array[768];
@@ -121,6 +122,9 @@ int mp_bluetooth_hci_uart_set_baudrate(uint32_t baudrate) {
 }
 
 int mp_bluetooth_hci_uart_write(const uint8_t *buf, size_t len) {
+    if (len > mp_bluetooth_hci_max_write) {
+        mp_bluetooth_hci_max_write = len;
+    }
     mp_bluetooth_hci_controller_wakeup();
     mp_uart_tx_data(hci_uart_id, (void *)buf, len);
     return 0;

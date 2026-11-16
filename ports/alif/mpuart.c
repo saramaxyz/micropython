@@ -74,6 +74,11 @@ static UART_Type *const uart_periph[UART_MAX] = {
 
 static uart_state_t uart_state[UART_MAX];
 
+// Bench diagnostics: TX starts, TX timeouts, RX line errors, dropped RX bytes,
+// maximum RX occupancy, incomplete TX returns, and overlapping TX starts.
+// Read through the existing watcher; counters never change driver decisions.
+volatile uint32_t mp_uart_diagnostics[UART_MAX][7];
+
 // This is called by soft_timer and executes at IRQ_PRI_PENDSV.
 static void rx_idle_timer_callback(soft_timer_entry_t *self) {
     uart_state_t *state = mp_container_of(self, uart_state_t, rx_idle_timer);
@@ -222,6 +227,10 @@ void mp_uart_tx_data(unsigned int uart_id, const uint8_t *src, size_t len) {
 
     // Configure transmission, to be handled by IRQ.
     uart_state_t *state = &uart_state[uart_id];
+    mp_uart_diagnostics[uart_id][0]++;
+    if (state->tx_src != state->tx_src_max) {
+        mp_uart_diagnostics[uart_id][6]++;
+    }
     state->status = UART_TRANSFER_STATUS_NONE;
     state->tx_src = src;
     state->tx_src_max = src + len;
@@ -234,6 +243,7 @@ void mp_uart_tx_data(unsigned int uart_id, const uint8_t *src, size_t len) {
     uint32_t start = mp_hal_ticks_ms();
     while (state->status == UART_TRANSFER_STATUS_NONE) {
         if (mp_hal_ticks_ms() - start > total_timeout_ms) {
+            mp_uart_diagnostics[uart_id][1]++;
             break;
         }
         mp_event_wait_indefinite();
@@ -241,6 +251,9 @@ void mp_uart_tx_data(unsigned int uart_id, const uint8_t *src, size_t len) {
 
     // Disable TX IRQ.
     uart_disable_tx_irq(uart);
+    if (state->tx_src != state->tx_src_max) {
+        mp_uart_diagnostics[uart_id][5]++;
+    }
 }
 
 static void mp_uart_irq_handler(unsigned int uart_id) {
@@ -253,6 +266,7 @@ static void mp_uart_irq_handler(unsigned int uart_id) {
         case UART_IIR_RECEIVER_LINE_STATUS: {
             uint32_t lsr = uart->UART_LSR;
             if (lsr & (UART_LSR_RECEIVER_FIFO_ERR | UART_LSR_OVERRUN_ERR)) {
+                mp_uart_diagnostics[uart_id][2]++;
                 state->status = UART_TRANSFER_STATUS_ERROR;
             }
             break;
@@ -274,7 +288,13 @@ static void mp_uart_irq_handler(unsigned int uart_id) {
                     }
                     #endif
                     if (state->rx_ringbuf != NULL) {
-                        ringbuf_put(state->rx_ringbuf, c);
+                        if (ringbuf_put(state->rx_ringbuf, c) < 0) {
+                            mp_uart_diagnostics[uart_id][3]++;
+                        }
+                        uint32_t used = ringbuf_avail(state->rx_ringbuf);
+                        if (used > mp_uart_diagnostics[uart_id][4]) {
+                            mp_uart_diagnostics[uart_id][4] = used;
+                        }
                     }
                 }
             }
