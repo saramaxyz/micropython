@@ -78,5 +78,6 @@ extern void board_exit_standby(void);
 #define CYW43_BT_UART_BAUDRATE_ACTIVE_USE       (2000000)
 
 // Bluetooth config
+#define MICROPY_PY_BLUETOOTH_ENABLE_HCI_CMD     (1)
 #define MICROPY_HW_BLE_UART_ID                  (0)
 #define MICROPY_HW_BLE_UART_BAUDRATE            (115200)
